@@ -6,6 +6,7 @@
 rm(list = ls()) # Clear workspace
 dev.off(dev.list()["RStudioGD"]) # Clear plots
 fileloc <- dirname(rstudioapi::getSourceEditorContext()$path) # Get location of current script
+fileloc
 setwd(fileloc) # Set working directory to script location
 rm(fileloc) # Remove fileloc variable
 
@@ -201,7 +202,10 @@ rets=function(x){
 }
 eq_rr=as.data.frame(sapply(eq_dd,rets)) 
 rdate=date[-1]
-
+fi_rr=as.data.frame(sapply(fi_dd,rets)) 
+rdate=date[-1]
+com_rr=as.data.frame(sapply(com_dd,rets)) 
+rdate=date[-1]
 # Calculate returns for all classes
 all_rr=as.data.frame(sapply(all_dd,rets)) 
 rdate=date[-1]
@@ -209,17 +213,23 @@ rdate=date[-1]
 # Correlation matrix for equities
 eq_cc=cor(eq_rr, use = "pairwise.complete.ob")
 
+# Correlation matrix for fixed income ETFs
+fi_cc=cor(fi_rr, use = "pairwise.complete.ob")
+
+# Correlation matrix for commodity ETFs
+com_cc=cor(com_rr, use = "pairwise.complete.ob")
+
 #Correlation matrix for all classes
 all_cc=cor(all_rr, use  = "pairwise.complete.ob")
 
 # Trying clustering for equities
+library(cluster)
+library(rpart)
 library(psych)
 library(maptree)
 library(dendextend)
-library(cluster)
-library(rpart)
-#Автоматично инсталиране на пакети?
 
+#Автоматично инсталиране на пакети?
 dissimilarity <- dist((1-abs(eq_cc)), method = "euclidean") # dissimilarity matrix
 clus <- hclust(dissimilarity, method = "complete" )
 # Dendrogram object
@@ -252,6 +262,37 @@ cluster_dd=data.frame(tickers=rownames(eq_cc), cluster=cutClus)
 freq=as.data.frame(count(cluster_dd, cluster))
 colnames(freq) <- c("Cluster", "Number of Assets")
 
+# Cluster analysis for fixed income ETFs 
+dissimilarity <- dist((1-abs(fi_cc)), method = "euclidean") # dissimilarity matrix
+clus <- hclust(dissimilarity, method = "complete" )
+# Dendrogram object
+dend <- as.dendrogram(clus)
+
+# Find optimal number of clusters
+op_k = kgs(clus, dissimilarity, maxclus = NULL)
+plot(names(op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
+k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
+
+# Cut the dendrogram to obtain exactly the optimal number of clusters
+cutClus <- cutree(dend, k = k_clus) #4 #5 #9
+# Plot dendrogram
+windows()
+par(xpd=TRUE)
+plot(dend, main="Cluster Dendrogram", xlab="", ylab="Distance")
+rect.dendrogram(dend , k = k_clus, border = 2:(k_clus+1))
+abline(h = heights_per_k.dendrogram(dend)[[k_clus]], col = 'red', lwd=2) 
+color_branches(dend, k = k_clus, col=2:(k_clus+1))
+color_labels(dend, k = k_clus, col=2:(k_clus+1))
+labels_cex(dend) <- 0.8
+
+# Visualization 2
+library(factoextra)
+windows()
+fviz_cluster(list(data = fi_cc, cluster = cutClus))
+
+# Cluster analysis for commodity ETFs 
+# No clusters, because there are only 3 commodity ETFs.
+
 # Cluster analysis for all classes
 dissimilarity <- dist((1-abs(all_cc)), method = "euclidean") # dissimilarity matrix
 clus <- hclust(dissimilarity, method = "complete" )
@@ -260,7 +301,7 @@ dend <- as.dendrogram(clus)
 
 # Find optimal number of clusters
 op_k = kgs(clus, dissimilarity, maxclus = NULL)
-plot (names (op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
+plot(names(op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
 k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
 
 # Cut the dendrogram to obtain exactly the optimal number of clusters
