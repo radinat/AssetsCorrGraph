@@ -1,5 +1,6 @@
 # Fileado Case Study
 # Part 1
+# v.2.0
 
 # Clear workspace and set working directory ----
 rm(list = ls()) # Clear workspace
