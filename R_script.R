@@ -62,7 +62,6 @@ rm(.getSymbols, envir=commodities$env)
 save(list=ls(commodities$env), file='commodities.RData',envir=commodities$env)
 
 
-
 # Load data (not downloading it every time) ----
 load("equity.RData", envir=equity$env)
 load('fixed_income.RData', envir=fixed_income$env)
@@ -228,8 +227,8 @@ library(rpart)
 library(psych)
 library(maptree)
 library(dendextend)
-
 #Автоматично инсталиране на пакети?
+
 dissimilarity <- dist((1-abs(eq_cc)), method = "euclidean") # dissimilarity matrix
 clus <- hclust(dissimilarity, method = "complete" )
 # Dendrogram object
@@ -274,7 +273,7 @@ plot(names(op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
 k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
 
 # Cut the dendrogram to obtain exactly the optimal number of clusters
-cutClus <- cutree(dend, k = k_clus) #4 #5 #9
+cutClus <- cutree(dend, k = k_clus)
 # Plot dendrogram
 windows()
 par(xpd=TRUE)
