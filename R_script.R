@@ -1,354 +1,417 @@
-# Fileado Case Study
-# Part 1
-# v.2.0
-
-# Clear workspace and set working directory ----
-rm(list = ls()) # Clear workspace
-dev.off(dev.list()["RStudioGD"]) # Clear plots
-fileloc <- dirname(rstudioapi::getSourceEditorContext()$path) # Get location of current script
-fileloc
-setwd(fileloc) # Set working directory to script location
-rm(fileloc) # Remove fileloc variable
 
 
 # Load libraries ----
-library(readxl) 
+library(readxl)
 library(quantmod)
 library(igraph)
 library(dplyr)
 library(lubridate)
+library(shiny)
+library(imputeTS)
+library(tidyverse)
 
+setwd("//Users//radinatalanova//Downloads")
+# # Import the available list of tickers ----
+equity.tickers = read_excel("List_of_assets.xlsx", sheet = 1)
+fixed.income.tickers = read_excel("List_of_assets.xlsx", sheet = 2)
+commodities.tickers = read_excel("List_of_assets.xlsx", sheet = 3)
+#
+# # Create Environments
+equity = list()
+equity$tickers = equity.tickers$Ticker
+equity$env = new.env()
 
-# Import the available list of tickers ----
-equity.tickers=read_excel("List_of_assets.xlsx",sheet=1)
-fixed.income.tickers=read_excel("List_of_assets.xlsx",sheet=2)
-commodities.tickers=read_excel("List_of_assets.xlsx",sheet=3)
+fixed_income = list()
+fixed_income$tickers = fixed.income.tickers$Ticker
+fixed_income$env = new.env()
 
-# What we have?
-dim(equity.tickers) # 131 - choose 30 of them
-dim(fixed.income.tickers) # 10 - choose 2 of them
-dim(commodities.tickers) # 3 - choose 1 of them
-
-# Create Environments #трябва да се създадат предварително, ако зареждаме данните от rdata файловете
-equity=list()
-equity$tickers=equity.tickers$Ticker
-equity$env=new.env()
-
-fixed_income=list()
-fixed_income$tickers=fixed.income.tickers$Ticker
-fixed_income$env=new.env()
-
-commodities=list()
-commodities$tickers=commodities.tickers$Ticker
-commodities$env=new.env()
+commodities = list()
+commodities$tickers = commodities.tickers$Ticker
+commodities$env = new.env()
 
 # Download historical information ----
 # For stocks:
-getSymbols(equity$tickers, env=equity$env, from="2006-04-28", "getSymbols.warning4.0"=FALSE) 
-rm(.getSymbols, envir=equity$env) 
-save(list=ls(equity$env), file='equity.RData',envir=equity$env)
+getSymbols(
+    equity$tickers,
+    env = equity$env,
+    from = "2006-01-01",
+    "getSymbols.warning4.0" = FALSE
+)
+rm(.getSymbols, envir = equity$env)
+save(list = ls(equity$env),
+     file = 'equity.RData',
+     envir = equity$env)
 
 # There is no data for ticker AGN in yahoo finance. Removed it from Excel
 # list of assets, because it brings an error when we load the data.
 
 # For fixed income ETFs:
-getSymbols(fixed_income$tickers, env=fixed_income$env, from="2006-04-28", "getSymbols.warning4.0"=FALSE) 
-rm(.getSymbols, envir=fixed_income$env) 
-save(list=ls(fixed_income$env), file='fixed_income.RData',envir=fixed_income$env)
+getSymbols(
+    fixed_income$tickers,
+    env = fixed_income$env,
+    from = "2006-01-01",
+    "getSymbols.warning4.0" = FALSE
+)
+rm(.getSymbols, envir = fixed_income$env)
+save(
+    list = ls(fixed_income$env),
+    file = 'fixed_income.RData',
+    envir = fixed_income$env
+)
 
 # For commodity ETFs:
-getSymbols(commodities$tickers, env=commodities$env, from="2006-04-28", "getSymbols.warning4.0"=FALSE) 
-rm(.getSymbols, envir=commodities$env) 
-save(list=ls(commodities$env), file='commodities.RData',envir=commodities$env)
+getSymbols(
+    commodities$tickers,
+    env = commodities$env,
+    from = "2006-01-01",
+    "getSymbols.warning4.0" = FALSE
+)
+rm(.getSymbols, envir = commodities$env)
+save(
+    list = ls(commodities$env),
+    file = 'commodities.RData',
+    envir = commodities$env
+)
 
 
-# Load data (not downloading it every time) ----
-load("equity.RData", envir=equity$env)
-load('fixed_income.RData', envir=fixed_income$env)
-load('commodities.RData', envir=commodities$env)
+# # Load data (not downloading it every time) ----
+#load("equity.RData", envir=equity$env)
+#load('fixed_income.RData', envir=fixed_income$env)
+#load('commodities.RData', envir=commodities$env)
 
 # Create data frames with adjusted prices ----
-eq=lapply(names(equity$env), get, envir=equity$env)
-fi=lapply(names(fixed_income$env), get, envir=fixed_income$env)
-com=lapply(names(commodities$env), get, envir=commodities$env)
+eq = lapply(names(equity$env), get, envir = equity$env)
+fi = lapply(names(fixed_income$env), get, envir = fixed_income$env)
+com = lapply(names(commodities$env), get, envir = commodities$env)
 
 # Equity data frame
-eq_dd=list() 
-for(i in 1:length(eq)){
-  eq_dd[[i]]=eq[[i]][,6] 
-} 
-eq_dd=do.call(merge,eq_dd)
-colnames(eq_dd)=gsub(".Adjusted","",colnames(eq_dd))
-eq_dd=as.data.frame(eq_dd)
-                    
+eq_dd = list()
+for (i in 1:length(eq)) {
+    eq_dd[[i]] = eq[[i]][, 6]
+}
+eq_dd = do.call(merge, eq_dd)
+colnames(eq_dd) = gsub(".Adjusted", "", colnames(eq_dd))
+eq_dd = as.data.frame(eq_dd)
+
 # Fixed income ETFs data frame
-fi_dd=list() 
-for(i in 1:length(fi)){
-  fi_dd[[i]]=fi[[i]][,6] 
-} 
-fi_dd=do.call(merge,fi_dd)
-colnames(fi_dd)=gsub(".Adjusted","",colnames(fi_dd))
-fi_dd=as.data.frame(fi_dd)
-                    
+fi_dd = list()
+for (i in 1:length(fi)) {
+    fi_dd[[i]] = fi[[i]][, 6]
+}
+fi_dd = do.call(merge, fi_dd)
+colnames(fi_dd) = gsub(".Adjusted", "", colnames(fi_dd))
+fi_dd = as.data.frame(fi_dd)
+
 # Commodities data frame
-com_dd=list() 
-for(i in 1:length(com)){
-  com_dd[[i]]=com[[i]][,6] 
-} 
-com_dd=do.call(merge,com_dd)
-colnames(com_dd)=gsub(".Adjusted","",colnames(com_dd)) 
-com_dd=as.data.frame(com_dd)
-
-rm(eq,fi,com,i)
-rm(commodities.tickers,equity.tickers,fixed.income.tickers)
-
-# Extract date
-date=ymd(rownames(com_dd))
-first_date=min(date)
-last_date=max(date)
-#Начална и крайна на какъв принцип са избирани?
-
-# Data preparation
-sapply(eq_dd, class)
-sapply(fi_dd, class)
-sapply(com_dd, class)
-
-# Missing values and dates of first observations available
-# Loops for dates
-# Equity:
-eq_first=vector("numeric")
-for (i in 1:ncol(eq_dd)) {
-  eq_first[i]=min(which(!is.na(eq_dd[,i])))
+com_dd = list()
+for (i in 1:length(com)) {
+    com_dd[[i]] = com[[i]][, 6]
 }
-eq_date=date[eq_first]
-eq_date
+com_dd = do.call(merge, com_dd)
+colnames(com_dd) = gsub(".Adjusted", "", colnames(com_dd))
+com_dd = as.data.frame(com_dd)
 
-# To remove equities with not enough observations:
-torem=which(eq_first>1)
-eq_dd=eq_dd[,-torem]
-eq_date=eq_date[-torem]
-
-# Fixed income ETFs:
-fi_first=vector("numeric")
-for (j in 1:ncol(fi_dd)) {
-  fi_first[j]=min(which(!is.na(fi_dd[,j])))
-}
-fi_date=date[fi_first]
-# Remove assets with too many missing values
-torem=which(fi_first>500) #500?
-fi_dd=fi_dd[,-torem]
-fi_date=fi_date[-torem]
-
-# Impute missing values
-library(imputeTS)
-library(forecast)
-
-toimpn=names(which(colSums(is.na(fi_dd))>0))
-for (i in toimpn) {
-  name=i
-  print(name)
-  curr_df = fi_dd[i]
-  first=vector("numeric")
-  for (k in 1:ncol(curr_df)) {
-    first[k]=min(which(!is.na(curr_df[,k])))
-  }
-  print(first)
-  last=vector("numeric")
-  for (k in 1:ncol(curr_df)) {
-    last[k]=max(which(!is.na(curr_df[,k])))
-  }
-  print(last)
-  bcData <- curr_df[first:last,] #back forecasting data
-  x <- bcData
-  h <- first-1
-  f <- frequency(x)
-  print(h)
-  revx <- ts(rev(x), frequency=f)
-  # Forecast
-  fc <- forecast(auto.arima(revx), h)$mean
-  for (j in 1:nrow(curr_df)) {
-    if (is.na(curr_df[j,1])) {
-      fi_dd[name][[1]][[j]] = fc[j]
-    } 
-  }
-}
-
-
-# Commodities
-com_first=vector("numeric")
-for (k in 1:ncol(com_dd)) {
-  com_first[k]=min(which(!is.na(com_dd[,k])))
-}
-com_date=date[com_first]
-
-summary(eq_date)
-# Auxiliary tables
-aux_eq=data.frame(row.names=names(eq_dd), missing_values=colSums(is.na(eq_dd)),
-                  first_date=eq_date)
-aux_fi=data.frame(row.names=names(fi_dd), missing_values=colSums(is.na(fi_dd)),
-                  first_date=fi_date)
-aux_com=data.frame(row.names=names(com_dd), missing_values=colSums(is.na(com_dd)),
-                  first_date=com_date)
+rm(eq, fi, com, i)
+rm(commodities.tickers, equity.tickers, fixed.income.tickers)
 
 # Bind data frames
-all_dd=cbind(eq_dd,fi_dd,com_dd)
+all_dd = cbind(eq_dd, fi_dd, com_dd)
 
-# Calculate returns for equities
-rets=function(x){ 
-  lx=dplyr::lag(x) 
-  r=(x-lx)/lx 
-  return (r[-1]) 
+all_dd$row_names = rownames(all_dd)
+all_dd$date = as.Date(all_dd$row_names)
+all_dd = all_dd[,!(names(all_dd) %in% c("row_names"))] # remove row_names column
+
+rownames(all_dd) = all_dd$date
+
+testdates = all_dd
+all_dd$date = as.Date(all_dd$date)
+all_dd = all_dd %>%
+    complete(date = seq(min(all_dd$date), max(all_dd$date), by = "day"))
+
+# #inpute missing dates
+testdates$date = as.Date(testdates$date)
+testdates = testdates %>%
+    complete(date = seq(min(testdates$date), max(testdates$date), by = "day"))
+# missing values interpolation
+testdates <- na_interpolation(testdates, option = "linear")
+testdates = as.data.frame(testdates)
+rownames(testdates) = as.character(testdates$date)
+#remove date from the set
+final = testdates[, !names(testdates) %in% c("date")]
+rownames(final) = rownames(testdates)
+
+# Perform rolling sample estimation of the correlation matrix ---
+date = ymd(rownames(final))
+rdate = date[-1]
+
+# Function for calculation of returns
+rets = function(x) {
+    lx = dplyr::lag(x)
+    r = (x - lx) / lx
+    return (r[-1])
 }
-eq_rr=as.data.frame(sapply(eq_dd,rets)) 
-rdate=date[-1]
-fi_rr=as.data.frame(sapply(fi_dd,rets)) 
-rdate=date[-1]
-com_rr=as.data.frame(sapply(com_dd,rets)) 
-rdate=date[-1]
-# Calculate returns for all classes
-all_rr=as.data.frame(sapply(all_dd,rets)) 
-rdate=date[-1]
 
-# Correlation matrix for equities
-eq_cc=cor(eq_rr, use = "pairwise.complete.ob")
+rr = as.data.frame(sapply(final, rets))
+rownames(rr) = rdate
 
-# Correlation matrix for fixed income ETFs
-fi_cc=cor(fi_rr, use = "pairwise.complete.ob")
 
-# Correlation matrix for commodity ETFs
-com_cc=cor(com_rr, use = "pairwise.complete.ob")
+n = 120 # length of the sliding window
+test_cc = list()
+suppressWarnings(for (i in 1:(nrow(rr) - n + 1)) {
+    test_cc[[i]] = cor(rr[i:(i + n - 1), ], use = "pairwise.complete.ob")
+})
+names(test_cc) = as.character(date[n:nrow(rr)])
 
-#Correlation matrix for all classes
-all_cc=cor(all_rr, use  = "pairwise.complete.ob")
 
-# Trying clustering for equities
-library(cluster)
-library(rpart)
-library(psych)
-library(maptree)
-library(dendextend)
-#Автоматично инсталиране на пакети?
 
-dissimilarity <- dist((1-abs(eq_cc)), method = "euclidean") # dissimilarity matrix
-clus <- hclust(dissimilarity, method = "complete" )
-# Dendrogram object
-dend <- as.dendrogram(clus)
+# R Shiny ----
+tweaks <-
+    list(tags$head(tags$style(
+        HTML(
+            "
+                                 .multicol1 {
+                                   height: 500px;
+                                   -webkit-column-count: 5; /* Chrome, Safari, Opera */
+                                   -moz-column-count: 5;    /* Firefox */
+                                   column-count: 6;
+                                   -moz-column-fill: auto;
+                                   -column-fill: auto;
+                                 };
+                                 .multicol2 {
+                                   height: 200px;
+                                   -webkit-column-count: 1; /* Chrome, Safari, Opera */
+                                   -moz-column-count: 1;    /* Firefox */
+                                   column-count: 1;
+                                   -moz-column-fill: auto;
+                                   -column-fill: auto;
+                                 }
+                                 "
+        )
+    )))
 
-# Find optimal number of clusters
-op_k = kgs(clus, dissimilarity, maxclus = NULL)
-plot (names (op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
-k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
+# Get ticker names
+eqnames = sort(colnames(eq_dd))
+finames = sort(colnames(fi_dd))
+comnames = sort(colnames(com_dd))
 
-# Cut the dendrogram to obtain exactly the optimal number of clusters
-cutClus <- cutree(dend, k = k_clus) #4 #5 #9
-# Plot dendrogram
-windows()
-par(xpd=TRUE)
-plot(dend, main="Cluster Dendrogram", xlab="", ylab="Distance")
-rect.dendrogram(dend , k = k_clus, border = 2:(k_clus+1))
-abline(h = heights_per_k.dendrogram(dend)[[k_clus]], col = 'red', lwd=2) 
-color_branches(dend, k = k_clus, col=2:(k_clus+1))
-color_labels(dend, k = k_clus, col=2:(k_clus+1))
-labels_cex(dend) <- 0.8
+names = colnames(all_dd[,!(names(all_dd) %in% c("date"))])
+names = sort(names)
 
-# Visualization 2
-library(factoextra)
-windows()
-fviz_cluster(list(data = all_cc, cluster = cutClus))
+# Create check boxes
+controls = list(
+    h3("Tickers:"),
+    tags$div(
+        align = 'left',
+        class = 'multicol1',
+        checkboxGroupInput(
+            inputId  = 'tSelector1',
+            label    = "Equities:",
+            choices  = eqnames,
+            selected = c(
+                "AMZN",
+                "ALB",
+                "AMAT",
+                "NKE",
+                "BBY",
+                "BSX",
+                "CMG",
+                "COST",
+                "DPZ",
+                "EA",
+                "EXAS",
+                "EOG",
+                "IBM",
+                "GILD",
+                "INTC",
+                "JNPR",
+                "MPC",
+                "TAK",
+                "TSLA",
+                "XLNX",
+                "VZ",
+                "VALE",
+                "TWOU",
+                "WMT",
+                "HUM",
+                "ALB",
+                "MAT",
+                "PEP",
+                "PLD",
+                "CVS"
+            ),
+            inline   = TRUE
+        )
+    ),
+    tags$div(
+        align = 'left',
+        class = 'multicol2',
+        checkboxGroupInput(
+            inputId  = 'tSelector2',
+            label    = "Fixed Income:",
+            choices  = finames,
+            selected = c("JNK", "TIP"),
+            inline   = TRUE
+        )
+    ),
+    tags$div(
+        align = 'left',
+        class = 'multicol2',
+        checkboxGroupInput(
+            inputId  = 'tSelector3',
+            label    = "Commodities:",
+            choices  = comnames,
+            selected = c("GLD"),
+            inline   = TRUE
+        )
+    )
+    
+)
 
-# Summarize results in a table
-cluster_dd=data.frame(tickers=rownames(eq_cc), cluster=cutClus)
-freq=as.data.frame(count(cluster_dd, cluster))
-colnames(freq) <- c("Cluster", "Number of Assets")
+ui <- fluidPage(
+    tags$head(tags$style(type = "text/css", ".irs {max-width: 1500px;}")),
+    titlePanel("Assets Correlation Graph"),
+    tweaks,
+    sidebarLayout(
+        sidebarPanel(
+            fluidRow(column(width = 12, controls),),
+            sliderInput(
+                "slider",
+                "Time",
+                min = as.Date("2007-01-01", "%Y-%m-%d"),
+                max = as.Date("2021-01-04", "%Y-%m-%d"),
+                value = as.Date("2014-05-13", timeFormat = "%Y-%m-%d"),
+                step = 1,
+                animate = TRUE,
+                width = 1000
+            )
+        ),
+        
+        mainPanel(plotOutput(
+            "clPlot", width = 1000, height = 900
+        ),)
+    )
+)
 
-# Cluster analysis for fixed income ETFs 
-dissimilarity <- dist((1-abs(fi_cc)), method = "euclidean") # dissimilarity matrix
-clus <- hclust(dissimilarity, method = "complete" )
-# Dendrogram object
-dend <- as.dendrogram(clus)
+server <- shinyServer(function(input, output, session) {
+    set.seed(123)
+    plot_data <- reactive(input$tSelector1)
+    plot_data <- reactive(input$tSelector2)
+    plot_data <- reactive(input$tSelector3)
+    
+    output$SliderText <- renderText({
+        input$slider
+    })
+    
+    currentFib <- reactive({
+        if (length(c(input$tSelector1, input$tSelector2, input$tSelector3)) < 2) {
+            p = "Choose at least 4 assets"
+            
+        } else {
+            # take data for the selected tickers only
+            selected = all_dd
+            selected = selected[, c(input$tSelector1,
+                                    input$tSelector2,
+                                    input$tSelector3,
+                                    'date')]
+            
+            inp = c(input$tSelector1,
+                    input$tSelector2,
+                    input$tSelector3)
+            dateinp = input$slider
+            temp = as.data.frame(test_cc[as.character(dateinp)])
+            
+            colnames(temp) = rownames(temp)
+            temp = temp[, inp]
+            
+            sel_cc = data.frame()
+            
+            for (i in inp) {
+                sel = data.frame(temp[i, ])
+                sel_cc = rbind(sel_cc, sel)
+            }
+            
+            # filter
+            inpdate = input$slider
+            daydata = selected %>%
+                filter(selected$date == inpdate)
+            
+            if ((sum(is.na(daydata) == FALSE)) == 1) {
+                inpdate = as.Date(input$slider) - 3
+                daydata = selected %>%
+                    filter(selected$date == inpdate)
+            }
+            
+            torem = which(colSums(is.na(daydata)) > 0)
+            if (length(torem) > 0) {
+                sel_cc = sel_cc[-torem, -torem]
+                rr = rr[, -torem]
+            }
+            
+            if (length(sel_cc) > 1) {
+                # Extract correlations only above the main diagonal
+                ww = list()
+                n = nrow(sel_cc) - 1
+                for (i in 1:n) {
+                    ww[[i]] = sel_cc[-c(1:i), i]
+                }
+                ww = unlist(ww) # vector of all correlations
+                
+                # Graph theory application
+                g = graph.full(length(sel_cc),
+                               directed = F,
+                               loops = F)
+                V(g)$name = colnames(sel_cc)
+                V(g)$color = "#A8C3F6"
+                
+                E(g) # all possible connections
+                
+                # Set threshold - plot connections with cor higher than 0.3
+                thr = 0.3
+                wwt = ifelse(abs(ww) < thr, 0, ww)
+                E(g)$weight = wwt
+                
+                E(g)[weight >= 0.7]$width = 3
+                E(g)[weight >= 0.7]$color = "black"
+                E(g)[weight <= -0.3]$color = "brown3"
+                E(g)[weight <= -0.3]$width = 3
+                E(g)[weight > -0.3 & weight < 0.7]$width = 0.5
+                E(g)[weight > -0.3 & weight < 0.7]$color = "grey"
+                
+                plot(
+                    g,
+                    layout = layout.fruchterman.reingold,
+                    vertex.color = "bisque2",
+                    vertex.label = V(g)$number,
+                    vertex.frame.color = "bisque2",
+                    vertex.label.color = "black",
+                    vertex.size = 12,
+                    vertex.label.cex = 1,
+                    vertex.label.family = "Helvetica",
+                    vertex.label.font = 2
+                )
+            }
+            
+            
+        }
+    })
+    
+    
+    set.seed(123)
+    output$plot <- renderPlot(plot(
+        x = plot_data(),
+        y = plot_data(),
+        pch = 7,
+        cex = 2,
+        xlim = c(1, 25),
+        ylim = c(1, 25)
+    ))
+    
+    output$clPlot <- renderPlot({
+        set.seed(123)
+        currentFib()
+        
+    })
+})
 
-# Find optimal number of clusters
-op_k = kgs(clus, dissimilarity, maxclus = NULL)
-plot(names(op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
-k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
 
-# Cut the dendrogram to obtain exactly the optimal number of clusters
-cutClus <- cutree(dend, k = k_clus)
-# Plot dendrogram
-windows()
-par(xpd=TRUE)
-plot(dend, main="Cluster Dendrogram", xlab="", ylab="Distance")
-rect.dendrogram(dend , k = k_clus, border = 2:(k_clus+1))
-abline(h = heights_per_k.dendrogram(dend)[[k_clus]], col = 'red', lwd=2) 
-color_branches(dend, k = k_clus, col=2:(k_clus+1))
-color_labels(dend, k = k_clus, col=2:(k_clus+1))
-labels_cex(dend) <- 0.8
-
-# Visualization 2
-library(factoextra)
-windows()
-fviz_cluster(list(data = fi_cc, cluster = cutClus))
-
-# Cluster analysis for commodity ETFs 
-# No clusters, because there are only 3 commodity ETFs.
-
-# Cluster analysis for all classes
-dissimilarity <- dist((1-abs(all_cc)), method = "euclidean") # dissimilarity matrix
-clus <- hclust(dissimilarity, method = "complete" )
-# Dendrogram object
-dend <- as.dendrogram(clus)
-
-# Find optimal number of clusters
-op_k = kgs(clus, dissimilarity, maxclus = NULL)
-plot(names(op_k), op_k, xlab="Number of Clusters", ylab="Penalty")
-k_clus = as.integer(names(op_k[which(op_k == min(op_k))])) 
-
-# Cut the dendrogram to obtain exactly the optimal number of clusters
-cutClus <- cutree(dend, k = k_clus) #4 #5 #9
-# Plot dendrogram
-windows()
-par(xpd=TRUE)
-plot(dend, main="Cluster Dendrogram", xlab="", ylab="Distance")
-rect.dendrogram(dend , k = k_clus, border = 2:(k_clus+1))
-abline(h = heights_per_k.dendrogram(dend)[[k_clus]], col = 'red', lwd=2) 
-color_branches(dend, k = k_clus, col=2:(k_clus+1))
-color_labels(dend, k = k_clus, col=2:(k_clus+1))
-labels_cex(dend) <- 0.8
-
-# Visualization 2
-library(factoextra)
-windows()
-fviz_cluster(list(data = all_cc, cluster = cutClus))
-
-# Other -------
-X=cor(all_rr)
-L = eigen(X, symmetric=TRUE)
-L$values
-L$vectors
-
-N = 6  # (use 1st 10 eigenvectors, set N larger to reduce regularization)
-P = L$vectors[, 1:N] %*% ((1 / L$values[1:N]) * t(L$vectors[, 1:N]))
-P = P / tcrossprod(sqrt(diag(P)))
-
-threshold = 0.80
-Q = P * (P > quantile(P, probs=threshold))                           # thresholded precision matrix
-g = graph.adjacency(Q, mode="undirected", weighted=TRUE, diag=FALSE) # ...expressed as a graph
-
-x = groups(cluster_louvain(g))
-i = unlist(lapply(x, length))
-d = order(i, decreasing=TRUE)
-x = x[d]
-i = i[d]
-j = i > 1
-s = sum(j)
-names(x)[j] = seq(1, s)
-names(x)[! j] = s + 1
-grp = as.integer(rep(names(x), i))
-clrs = c(rainbow(s),'gray')[grp[order(unlist(x))]]
-g = set_vertex_attr(g, "color", value=clrs)
-gg=graph_from_data_frame(P)
-library(threejs)
-windows()
-graphjs(g, vertex.size=0.2, vertex.shape=colnames(X), edge.alpha=0.5)
-plot(g)
-
+shinyApp(ui = ui, server = server)
